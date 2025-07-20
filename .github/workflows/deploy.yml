@@ -1,29 +1,40 @@
-name: Deploy to Heroku
+name: Node.js CI (24x7)
 
 on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
 
 jobs:
-  deploy:
+  keep-alive:
+
     runs-on: ubuntu-latest
 
+    strategy:
+      matrix:
+        node-version: [20.x]
+
     steps:
-    - name: Checkout repository
+    - name: Repository එක checkout කරන්න
       uses: actions/checkout@v3
 
-    - name: Login to Heroku
-      uses: akhileshns/heroku-deploy@v3.12.12
+    - name: Node.js setup කරන්න
+      uses: actions/setup-node@v3
       with:
-        heroku_api_key: ${{ secrets.HEROKU_API_KEY }}
-        heroku_app_name: "your-heroku-app-name" # <--- Heroku app name
-        heroku_email: "your-email@example.com"  # <--- Heroku account email
+        node-version: ${{ matrix.node-version }}
 
-    - name: Deploy to Heroku
-      uses: akhileshns/heroku-deploy@v3.12.12
-      with:
-        heroku_api_key: ${{ secrets.HEROKU_API_KEY }}
-        heroku_app_name: "your-heroku-app-name"
-        heroku_email: "your-email@example.com"
-        usedocker: false
+    - name: Dependency install කරන්න
+      run: npm ci
+
+    - name: App එක Start කරන්න (background)
+      run: |
+        npm start &
+        echo "App එක background එකේ run වෙලා ඉන්නේ..."
+
+    - name: Keep alive 24 hours
+      run: |
+        echo "Job එක පැය 24 ක් idle වෙන්නේ නැතුව තියලා තියනවා..."
+        sleep 86400  # 86400 seconds = 24 hours
