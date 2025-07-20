@@ -10,8 +10,8 @@ on:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
+    timeout-minutes: 1440  # 24 hours
 
     strategy:
       matrix:
@@ -29,12 +29,18 @@ jobs:
     - name: Install dependencies
       run: npm install
 
-    - name: Start application (background)
-      run: |
-        npm start &
-        echo "App is running in the background..."
+    - name: Install PM2 globally
+      run: npm install pm2 -g
 
-    - name: Keep job alive for 24 hours
+    - name: Start application with PM2
       run: |
-        echo "Keeping the job alive for 24 hours..."
-        sleep 86400  # 86400 seconds = 24 hours
+        pm2 start npm --name "app" -- start
+        pm2 save
+
+    - name: Keep job alive
+      run: |
+        echo "App is running under PM2 with auto-restart enabled."
+        for i in {1..1440}; do
+          pm2 list  # Show PM2 process list every minute
+          sleep 60
+        done
