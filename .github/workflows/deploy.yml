@@ -9,7 +9,7 @@ on:
       - main
 
 jobs:
-  keep-alive:
+  build:
 
     runs-on: ubuntu-latest
 
@@ -18,23 +18,23 @@ jobs:
         node-version: [20.x]
 
     steps:
-    - name: Repository එක checkout කරන්න
+    - name: Checkout repository
       uses: actions/checkout@v3
 
-    - name: Node.js setup කරන්න
+    - name: Set up Node.js
       uses: actions/setup-node@v3
       with:
         node-version: ${{ matrix.node-version }}
 
-    - name: Dependency install කරන්න
-      run: npm ci
+    - name: Install dependencies
+      run: npm install
 
-    - name: App එක Start කරන්න (background)
+    - name: Start application (background)
       run: |
         npm start &
-        echo "App එක background එකේ run වෙලා ඉන්නේ..."
+        echo "App is running in the background..."
 
-    - name: Keep alive 24 hours
+    - name: Keep job alive for 24 hours
       run: |
-        echo "Job එක පැය 24 ක් idle වෙන්නේ නැතුව තියලා තියනවා..."
+        echo "Keeping the job alive for 24 hours..."
         sleep 86400  # 86400 seconds = 24 hours
