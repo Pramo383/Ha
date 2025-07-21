@@ -1,91 +1,46 @@
-name: Node.js CI/CD (24x7 Production)
+name: Node.js CI (24x7)
 
 on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
+    timeout-minutes: 1440  # 24 hours
 
     strategy:
       matrix:
         node-version: [20.x]
 
     steps:
-    # ✅ Checkout Repo
     - name: Checkout repository
       uses: actions/checkout@v3
 
-    # ✅ Set up Node.js
     - name: Set up Node.js
       uses: actions/setup-node@v3
       with:
         node-version: ${{ matrix.node-version }}
 
-    # ✅ Install dependencies
     - name: Install dependencies
-      run: npm ci
+      run: npm install
 
-    # ✅ Build project
-    - name: Build project
-      run: npm run build
+    - name: Install PM2 globally
+      run: npm install pm2 -g
 
-    # 🚀 Deploy to Production Server
-    - name: Deploy to Server with PM2
-      uses: appleboy/ssh-action@v0.1.10
-      with:
-        host: ${{ secrets.SERVER_HOST }}
-        username: ${{ secrets.SERVER_USER }}
-        key: ${{ secrets.SERVER_SSH_KEY }}
-        port: 22
-        script: |
-          set -e  # Exit on error
-          APP_PATH="${{ secrets.APP_PATH }}"
-          PM2_APP="${{ secrets.PM2_APP_NAME }}"
-          ENV_FILE="$APP_PATH/.env"
-
-          echo "📦 Deploying app to $APP_PATH"
-          cd $APP_PATH
-
-          echo "🔄 Updating codebase"
-          git fetch --all
-          git reset --hard origin/main
-
-          echo "📦 Installing production dependencies"
-          npm ci --only=production
-
-          echo "🔐 Updating .env file (if provided)"
-          if [ ! -z "${{ secrets.ENV_FILE_BASE64 }}" ]; then
-            echo "${{ secrets.ENV_FILE_BASE64 }}" | base64 -d > $ENV_FILE
-          fi
-
-          echo "🚀 Starting/Reloading app with PM2"
-          if pm2 describe $PM2_APP > /dev/null; then
-            pm2 reload ecosystem.config.js --env production
-          else
-            pm2 start ecosystem.config.js --env production
-          fi
-
-          pm2 save
-          pm2 list
-
-    # 🩺 Health Check
-    - name: Health Check
+    - name: Start application with PM2
       run: |
-        echo "🔍 Checking health at ${{ secrets.HEALTHCHECK_URL }}"
-        curl -fsSL "${{ secrets.HEALTHCHECK_URL }}" || exit 1
+        pm2 start npm --name "app" -- start
+        pm2 save
 
-    # 📣 Slack Notification on Failure
-    - name: Notify Slack
-      if: failure()
-      uses: slackapi/slack-github-action@v1.23.0
-      with:
-        payload: |
-          {
-            "channel": "#deployments",
-            "text": ":x: Deployment failed for *${{ secrets.PM2_APP_NAME }}* on *${{ secrets.SERVER_HOST }}*"
-          }
-      env:
-        SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+    - name: Keep job alive
+      run: |
+        echo "App is running under PM2 with auto-restart enabled."
+        for i in {1..1440}; do
+          pm2 list  # Show PM2 process list every minute
+          sleep 60
+        done
