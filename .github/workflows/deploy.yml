@@ -1,4 +1,4 @@
-name: Node.js CI/CD (Production)
+name: Node.js CI/CD (24x7 Production)
 
 on:
   push:
@@ -14,21 +14,26 @@ jobs:
         node-version: [20.x]
 
     steps:
+    # ✅ Checkout Repo
     - name: Checkout repository
       uses: actions/checkout@v3
 
+    # ✅ Set up Node.js
     - name: Set up Node.js
       uses: actions/setup-node@v3
       with:
         node-version: ${{ matrix.node-version }}
 
+    # ✅ Install dependencies
     - name: Install dependencies
       run: npm ci
 
+    # ✅ Build project
     - name: Build project
       run: npm run build
 
-    - name: Deploy to Production Server
+    # 🚀 Deploy to Production Server
+    - name: Deploy to Server with PM2
       uses: appleboy/ssh-action@v0.1.10
       with:
         host: ${{ secrets.SERVER_HOST }}
@@ -36,53 +41,44 @@ jobs:
         key: ${{ secrets.SERVER_SSH_KEY }}
         port: 22
         script: |
-          set -e  # Exit immediately if a command exits with non-zero
+          set -e  # Exit on error
           APP_PATH="${{ secrets.APP_PATH }}"
-          ENV_FILE_PATH="$APP_PATH/.env"
           PM2_APP="${{ secrets.PM2_APP_NAME }}"
+          ENV_FILE="$APP_PATH/.env"
 
-          echo "🚀 Deploying to $APP_PATH"
-
+          echo "📦 Deploying app to $APP_PATH"
           cd $APP_PATH
 
-          # Backup current commit hash for rollback
-          LAST_COMMIT=$(git rev-parse HEAD)
-          echo "🔖 Saving last commit hash: $LAST_COMMIT"
-
-          # Pull latest code
+          echo "🔄 Updating codebase"
           git fetch --all
-          git reset --hard origin/main || (echo "❌ Git pull failed. Rolling back." && git reset --hard $LAST_COMMIT && exit 1)
+          git reset --hard origin/main
 
-          # Install production dependencies
-          npm ci --only=production || (echo "❌ npm ci failed. Rolling back." && git reset --hard $LAST_COMMIT && npm ci --only=production && pm2 restart $PM2_APP && exit 1)
+          echo "📦 Installing production dependencies"
+          npm ci --only=production
 
-          # Update .env file securely (base64 encoded)
+          echo "🔐 Updating .env file (if provided)"
           if [ ! -z "${{ secrets.ENV_FILE_BASE64 }}" ]; then
-            echo "⚡ Updating .env file from secret"
-            echo "${{ secrets.ENV_FILE_BASE64 }}" | base64 -d > $ENV_FILE_PATH
+            echo "${{ secrets.ENV_FILE_BASE64 }}" | base64 -d > $ENV_FILE
           fi
 
-          # Start or reload PM2 app using ecosystem file
+          echo "🚀 Starting/Reloading app with PM2"
           if pm2 describe $PM2_APP > /dev/null; then
-            echo "♻️ Reloading PM2 app: $PM2_APP"
             pm2 reload ecosystem.config.js --env production
           else
-            echo "🚀 Starting PM2 app: $PM2_APP"
             pm2 start ecosystem.config.js --env production
           fi
 
-          # Save PM2 process list
           pm2 save
-
-          # Show PM2 process list
           pm2 list
 
-    - name: Health check
+    # 🩺 Health Check
+    - name: Health Check
       run: |
-        echo "🔍 Checking app health..."
-        curl -f "${{ secrets.HEALTHCHECK_URL }}" || (echo "❌ Health check failed! Rolling back..." && exit 1)
+        echo "🔍 Checking health at ${{ secrets.HEALTHCHECK_URL }}"
+        curl -fsSL "${{ secrets.HEALTHCHECK_URL }}" || exit 1
 
-    - name: Send Notification on Failure
+    # 📣 Slack Notification on Failure
+    - name: Notify Slack
       if: failure()
       uses: slackapi/slack-github-action@v1.23.0
       with:
